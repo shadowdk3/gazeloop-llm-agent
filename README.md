@@ -1,0 +1,49 @@
+# GazeLoop
+
+GazeLoop is an intelligent, multimodal AI vision-guard agent powered by Google Gemini 3.6-Flash, OpenCV, and Python. It inspects surveillance imagery or video streams for safety hazards, triggers automated alerts, and provides interactive manual frame-stepping with real-time status overlays.
+
+![demo1_result](./reference/demo1_result.png)
+![demo2_result](./reference/demo2_result.png)
+
+## Key Features
+
+Multimodal Inspection: Powered by `gemini-3.6-flash` supporting both JPEG and PNG image frames.
+
+Dual Alert Mechanism:
+
+    - Automatically invokes the `trigger_alert` tool when Gemini detects an anomaly.
+    - Fallback keyword matcher (alert, abnormal, fire, fall) scanning the model's text response.
+
+Interactive Manual Stepping: Press any key in the OpenCV window to advance frame-by-frame through images or video streams, or `q` to quit.
+
+On-Screen Status Overlay: Renders color-coded status badges directly in the bottom-right corner of the frame:
+
+    - normal (Green) — Safe conditions.
+    - abnormal (Red) — Hazard or anomaly detected.
+
+Flexible Input Routing: Switch effortlessly between default static demo images, custom images, or video files.
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- A Google AI Studio API key (GEMINI_API_KEY)
+
+```
+pip install google-genai opencv-python python-dotenv
+```
+
+### Running the Agent
+
+Place your target images in the project directory (e.g., demo1.png, demo2.png) and run:
+
+```
+python main.py
+```
+
+## Acknowledgements
+
+* **Test Videos**: Sample video clips used for local testing in this repository are sourced from the **Fall Detection Dataset** by [Unidata](https://unidata.pro/datasets/fall-detection/) via Kaggle.
+* **License**: Licensed under [Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+* *Note: These sample clips are used strictly for local educational and non-commercial testing purposes.*
