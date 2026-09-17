@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment & Credentials
+.env
+
+# Logs and runtime outputs
+logs/*.log
+data/snapshots/*
+!data/snapshots/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db
