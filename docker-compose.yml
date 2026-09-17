@@ -1,0 +1,38 @@
+# Specifies the Docker Compose file format version (3.8 is widely supported for modern Compose syntax)
+version: '3.8'
+
+# Defines the group of containers/services that make up your application
+services:
+  # Name of your specific service
+  gazeloop:
+    # Build context: Tells Docker Compose to build the image using the Dockerfile in the current directory (.)
+    build: .
+
+    # Assigns a custom name to the container when it runs, rather than auto-generating one
+    container_name: gazeloop-agent
+
+    # Loads environment variables from a local '.env' file into the container at startup
+    env_file:
+      - .env
+
+    # Pass specific environment variables into the container:
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DISPLAY=${DISPLAY}
+
+    # Mounts local host directories and sockets into the container path:
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+    # Maps hardware devices from host to container:
+    # (Uncomment this block when running real-time camera streams on a machine with /dev/video0 attached)
+    # devices:
+    #   - /dev/video0:/dev/video0
+
+    # Keeps standard input (stdin) open, essential for interactive CLI programs or scripts that wait for keyboard inputs
+    stdin_open: true
+
+    # Allocates a pseudo-TTY, enabling colored terminal output and interactive terminal sessions inside the container
+    tty: true

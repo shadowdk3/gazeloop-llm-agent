@@ -42,6 +42,30 @@ Place your target images in the project directory (e.g., demo1.png, demo2.png) a
 python main.py
 ```
 
+## Running with Docker
+
+You can also run GazeLoop inside a container with live graphical X11 display forwarding (ideal for Linux/WSL2 environments).
+
+- Build the container image using Docker Compose:
+
+```
+docker-compose build --no-cache
+```
+
+### Run the Container
+
+- Input video / camera source
+
+```
+docker-compose run --rm gazeloop -i data/demo_video.mp4
+```
+
+or 
+
+```
+docker-compose run --rm gazeloop
+```
+
 ## Acknowledgements
 
 * **Test Videos**: Sample video clips used for local testing in this repository are sourced from the **Fall Detection Dataset** by [Unidata](https://unidata.pro/datasets/fall-detection/) via Kaggle.
