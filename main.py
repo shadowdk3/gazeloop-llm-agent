@@ -31,14 +31,14 @@ if __name__ == "__main__":
         if args.input.isdigit():
             camera_id = int(args.input)
             agent = VisionAgent()
-            agent.analyze_stream(source=camera_id)
+            agent.hybrid_analyze_stream(source=camera_id)
 
         # Video file (e.g., --input data/demo.mp4)
         elif args.input.lower().endswith(
                 (".mp4", ".avi", ".mov", ".mkv", ".webm")
             ):
             agent = VisionAgent()
-            agent.analyze_stream(source=args.input)
+            agent.hybrid_analyze_stream(source=args.input)
 
         # Single image path (e.g., --input data/custom.png)
         else:

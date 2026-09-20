@@ -3,10 +3,12 @@ from typing import List, Union
 from google import genai
 from google.genai import types
 from src.tools import trigger_alert
+import src.methods
 import cv2
 import time
 from google.genai.errors import ServerError
 import logging
+from ultralytics import YOLO
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -35,6 +37,8 @@ class VisionAgent:
                 "If everything is normal, do not call any tool, just reply briefly: 'Current status is safe and normal.'"
             ),
         )
+        
+        self.model = YOLO("yolo11m.pt")
 
     def _inspect_frame_data(self, encoded_img, mime_type) -> bool:
         img_part = types.Part.from_bytes(
@@ -143,8 +147,8 @@ class VisionAgent:
             # save result
             output_path = f"data/output_{img_path.name}"
             self.save_analyze_result(frame, status_text, output_path)
-            
-    def analyze_stream(self, source: Union[int, str]):
+       
+    def hybrid_analyze_stream(self, source: Union[int, str]):
         
         # stream handler for both camera / video
         cap = cv2.VideoCapture(source)
@@ -158,34 +162,64 @@ class VisionAgent:
             fps = 30.0
             
         # Calculate millisecond delay per frame for cv2.waitKey()
-        wait_time_ms = int(1000 / fps)
+        # wait_time_ms = int(1000 / fps)
     
         frame_idx = 0
-        last_analysis_time = 0.0
+        # last_analysis_time = 0.0
         
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
             
-            current_time = time.time()
+            # --- TIER 1: YOLO inference (classes=[0] filters for 'person' only) ---
+            results = self.model(frame, classes=[0], verbose=False)
             
-            # Check if INTERVAL_SECOND seconds have passed since the last analysis
-            if current_time - last_analysis_time >= INTERVAL_SECOND:
-                last_analysis_time = current_time
+            is_potential_fall = False
+            
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    # Get box coordinates [x1, y1, x2, y2]
+                    coords = box.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = map(int, coords[:4])
+                    conf = float(box.conf[0].cpu())
+                    
+                    # Optional confidence filter
+                    if conf < 0.4:
+                        continue
+                        
+                    # Run Aspect Ratio Check on the Bounding Box
+                    is_potential_fall = src.methods.check_box_aspect_ratio(x1, y1, x2, y2)
+                    
+                    # Draw bounding box (Green if normal, Red if potential fall)
+                    box_color = (0, 0, 255) if is_potential_fall else (0, 255, 0)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+                    cv2.putText(frame, f"Person {conf:.2f}", (x1, y1 - 10), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
+                    
+            if is_potential_fall:
+                print("--- Tier 1 Triggered (YOLO): Potential horizontal fall detected! Engaging LLM Tier 2 ---")
                 
                 success, encoded_img = cv2.imencode(".jpg", frame)
+                
                 if not success:
                     continue
-            
+    
                 logging.info(f"--- Analyzing frame at {time.strftime('%H:%M:%S')} ---")
                 is_alert = self._inspect_frame_data(encoded_img, mime_type="image/jpeg")
-                status_text = self._draw_status(frame, is_alert)
+                status_text = self._draw_status(frame, is_alert)    
                 
                 # save result
                 output_path = f"data/output_{frame_idx}.jpg"
-                self.save_analyze_result(frame, status_text, output_path)
+                self.save_analyze_result(frame, status_text, output_path)     
             
-                frame_idx += 1
+            frame_idx += 1
+            # cv2.imshow("Hybrid Fall Detector", frame)
+            
+            # key = cv2.waitKey(0) & 0xFF
+            # if key == ord('q') or key == 27:
+            #     print("Exiting stream...")
+            #     break
             
         cap.release()
