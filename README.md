@@ -5,6 +5,9 @@ GazeLoop is an intelligent, multimodal AI vision-guard agent powered by Google G
 ![demo1_result](./reference/demo1_result.png)
 ![demo2_result](./reference/demo2_result.png)
 
+hybrid result
+![hybrid_result](./reference/hybrid_result.png)
+
 ## Key Features
 
 Multimodal Inspection: Powered by `gemini-3.6-flash` supporting both JPEG and PNG image frames.
