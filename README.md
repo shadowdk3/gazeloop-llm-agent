@@ -14,7 +14,7 @@ HITL dashboard (Streamlit)
 - **Multimodal Inspection:** Powered by `gemini-3.6-flash` supporting both JPEG and PNG image frames.
 - **Hybrid Tiered Detection (YOLO + LLM):** 
   - *Tier 1:* Edge-optimized YOLO inference and geometric bounding box aspect-ratio checks run locally to instantly flag potential anomalies (such as horizontal falls) without hammering the API.
-  - *Tier 2:* When triggered, frames are passed to Gemini for deep contextual verification and tool invocation.
+  - *Tier 2:* When triggered, frames are passed to Gemini / Local edge validation using **Ollama** (`llama3.2-vision` or **`moondream`**) for deep contextual verification and tool invocation.
 - **Human-in-the-Loop (HITL) Review Dashboard:** A built-in Streamlit dashboard (`dashboard.py`) that manages an alert queue (`hitl_alerts_queue.json`), allowing security operators to review snapshots, check AI reasoning reports, and **Confirm** or **Dismiss** alerts.
 - **Dual Alert Mechanism:**
     - Automatically invokes the `trigger_alert` tool when Gemini detects an anomaly.
@@ -31,9 +31,13 @@ HITL dashboard (Streamlit)
 
 - Python 3.10+
 - A Google AI Studio API key (GEMINI_API_KEY)
+- Install Ollama
 
 ```
-pip install google-genai opencv-python python-dotenv
+sudo apt-get update && sudo apt-get install -y zstd
+pip install google-genai opencv-python python-dotenv ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama run llama3.2-vision
 ```
 
 ### Running the Agent

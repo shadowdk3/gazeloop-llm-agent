@@ -12,6 +12,7 @@ from ultralytics import YOLO
 import uuid
 import json
 from datetime import datetime
+from src.local_validator import LocalEdgeValidator
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -42,7 +43,8 @@ class VisionAgent:
         )
         
         self.model = YOLO("yolo11m.pt")
-
+        self.edge_validator = LocalEdgeValidator(model_name="moondream")
+        
     def _inspect_frame_data(self, encoded_img, mime_type) -> bool:
         """
         Sends an image frame to the Gemini model for anomaly inspection with retry handling.
@@ -281,9 +283,10 @@ class VisionAgent:
                     
                     if not success:
                         continue
-        
+    
                     logging.info(f"--- Analyzing frame at {time.strftime('%H:%M:%S')} ---")
-                    hitl_record = self._inspect_frame_data(encoded_img, mime_type="image/jpeg")
+                    # hitl_record = self._inspect_frame_data(encoded_img, mime_type="image/jpeg")
+                    hitl_record = self.edge_validator.verify_fall_event(frame)
                     last_analysis_time = current_time
                     
                     # Retrieve record identifiers
