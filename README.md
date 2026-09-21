@@ -1,6 +1,6 @@
 # GazeLoop
 
-GazeLoop is an intelligent, multimodal AI vision-guard agent powered by Google Gemini 3.6-Flash, OpenCV, and Python. It inspects surveillance imagery or video streams for safety hazards, triggers automated alerts, and provides interactive manual frame-stepping with real-time status overlays.
+GazeLoop is an intelligent, multimodal AI vision-guard agent powered by Google Gemini 3.6-Flash, local Vision-Language Models (via Ollama), OpenCV, and Python. It inspects surveillance imagery or video streams for safety hazards, triggers automated alerts, and provides interactive manual frame-stepping with real-time status overlays.
 
 ![demo1_result](./reference/demo1_result.png)
 ![hybrid_result](./reference/hybrid_result.png)
