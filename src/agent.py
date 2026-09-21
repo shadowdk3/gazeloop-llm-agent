@@ -9,6 +9,9 @@ import time
 from google.genai.errors import ServerError
 import logging
 from ultralytics import YOLO
+import uuid
+import json
+from datetime import datetime
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -41,10 +44,18 @@ class VisionAgent:
         self.model = YOLO("yolo11m.pt")
 
     def _inspect_frame_data(self, encoded_img, mime_type) -> bool:
+        """
+        Sends an image frame to the Gemini model for anomaly inspection with retry handling.
+        Parses tool calls or text responses to determine if a HITL alert should be raised.
+        """
+        # Wrap raw image bytes into a GenAI Part object for multimodal ingestion
         img_part = types.Part.from_bytes(
             data=encoded_img.tobytes(), mime_type=mime_type
         )
 
+        response = None
+        error_log = None
+    
         for attempt in range(MAX_RETRIES):
             try:
                 print(f"Sending to Gemini for analysis...")
@@ -65,25 +76,89 @@ class VisionAgent:
                 else:
                     print("Max retries reached. API is still unavailable.")
                     raise e
-        is_alert = False
-              
+                
+        is_suggested_alert = False
+        suggested_action = None
+        function_calls_data = []
+        
+        # Check if the model triggered a tool call (e.g., trigger_alert)
         if response.function_calls:
             for call in response.function_calls:
+                args = dict(call.args) if call.args else {}
+
                 if call.name == "trigger_alert":
-                    args = call.args
-                    res = trigger_alert(
-                        reason=args.get("reason", "Unknown anomaly"),
-                        severity=args.get("severity", "Medium")
-                    )
-                    print(f"[Agent Execution Feedback]: {res}")
-                    is_alert = True
-        else:
-            print(f"[Agent Reasoning Result]: {response.text}")
+                    is_suggested_alert = True
+                    
+                    suggested_action = {
+                        "tool_name": "trigger_alert",
+                        "reason": args.get("reason", "Unknown anomaly"),
+                        "severity": args.get("severity", "Medium")
+                    }
+                    print(f"[Gemini Suggestion]: Recommended Alert -> Reason: {suggested_action['reason']}")
+                    
+                function_calls_data.append({
+                    "name": call.name,
+                    "args": args
+                })
+
+        # Fallback to analyzing raw text response if no tool calls were made
+        raw_text = response.text if (response and hasattr(response, "text")) else ""
+        if not response.function_calls and raw_text:
+            print(f"[Agent Reasoning Result]: {raw_text}")
+            if any(word in raw_text.lower() for word in ALERT_KEYWORDS):
+                is_suggested_alert = True
+                suggested_action = {
+                    "tool_name": "keyword_match",
+                    "reason": raw_text,
+                    "severity": "Medium"
+                }
             
-            if any(word in response.text.lower() for word in ALERT_KEYWORDS):
-                is_alert = True
+        # Build the standard Human-in-the-Loop (HITL) queue record dictionary
+        alert_id = str(uuid.uuid4())
+        record = {
+            "alert_id": alert_id,
+            "timestamp": datetime.now().isoformat(),
+            "mime_type": mime_type,
+            "image_path": None,  
+            "ai_suggested_alert": is_suggested_alert,
+            "suggested_action": suggested_action,
+            "gemini_response": {
+                "text": raw_text,
+                "function_calls": function_calls_data
+            },
+            
+            # HITL State Tracking: PENDING requires operator review; AUTO_PASSED is skipped
+            "hitl_status": "PENDING" if is_suggested_alert else "AUTO_PASSED",
+            "human_review": {
+                "reviewed_by": None,
+                "reviewed_at": None,
+                "decision": None,  # Will store "CONFIRMED" or "DISMISSED"
+                "notes": None
+            },
+            "error": error_log
+        }
+        
+        # if is_suggested_alert:
+            # self._notify_operator_for_review(record)
+        
+        return record       
+        
+    def _save_to_json(self, data: dict, output_filepath: str = "hitl_alerts_queue.json"):
+        try:
+            try:
+                with open(output_filepath, "r", encoding="utf-8") as f:
+                    logs = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                logs = []
+
+            logs.append(data)
+
+            with open(output_filepath, "w", encoding="utf-8") as f:
+                json.dump(logs, f, ensure_ascii=False, indent=2)
                 
-        return is_alert       
+            print(f"[HITL Log Saved]: Alert ID {data['alert_id']} stored with status: {data['hitl_status']}")
+        except Exception as e:
+            print(f"Failed to save JSON log: {e}")
         
     def _draw_status(self, frame, is_alert: bool) -> str:
         # Display the image locally using OpenCV
@@ -161,11 +236,8 @@ class VisionAgent:
         if fps <= 0:
             fps = 30.0
             
-        # Calculate millisecond delay per frame for cv2.waitKey()
-        # wait_time_ms = int(1000 / fps)
-    
         frame_idx = 0
-        # last_analysis_time = 0.0
+        last_analysis_time = 0.0
         
         while True:
             ret, frame = cap.read()
@@ -185,7 +257,7 @@ class VisionAgent:
                     x1, y1, x2, y2 = map(int, coords[:4])
                     conf = float(box.conf[0].cpu())
                     
-                    # Optional confidence filter
+                    # Filter out low-confidence detections
                     if conf < 0.4:
                         continue
                         
@@ -198,28 +270,37 @@ class VisionAgent:
                     cv2.putText(frame, f"Person {conf:.2f}", (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
                     
+            current_time = time.time()
+            # --- TIER 2: Gemini LLM Verification ---
             if is_potential_fall:
-                print("--- Tier 1 Triggered (YOLO): Potential horizontal fall detected! Engaging LLM Tier 2 ---")
-                
-                success, encoded_img = cv2.imencode(".jpg", frame)
-                
-                if not success:
-                    continue
-    
-                logging.info(f"--- Analyzing frame at {time.strftime('%H:%M:%S')} ---")
-                is_alert = self._inspect_frame_data(encoded_img, mime_type="image/jpeg")
-                status_text = self._draw_status(frame, is_alert)    
-                
-                # save result
-                output_path = f"data/output_{frame_idx}.jpg"
-                self.save_analyze_result(frame, status_text, output_path)     
+                if (current_time - last_analysis_time) >= INTERVAL_SECOND:
+                    print("--- Tier 1 Triggered (YOLO): Potential horizontal fall detected! Engaging LLM Tier 2 ---")
+                    
+                    # Encode current frame to JPEG format for API transmission
+                    success, encoded_img = cv2.imencode(".jpg", frame)
+                    
+                    if not success:
+                        continue
+        
+                    logging.info(f"--- Analyzing frame at {time.strftime('%H:%M:%S')} ---")
+                    hitl_record = self._inspect_frame_data(encoded_img, mime_type="image/jpeg")
+                    last_analysis_time = current_time
+                    
+                    # Retrieve record identifiers
+                    if hitl_record.get("ai_suggested_alert"):
+                        alert_id = hitl_record["alert_id"]
+                        is_alert = hitl_record["ai_suggested_alert"]
+                        file_text = f"HITL_PENDING_ID_{alert_id[:8]}"
+                    
+                    # save result
+                    Path("data/snapshots").mkdir(parents=True, exist_ok=True)
+                    output_path = f"data/snapshots/{file_text}.jpg"
+                    hitl_record["image_path"] = output_path
+                    
+                    status_text = self._draw_status(frame, is_alert)    
+                    self._save_to_json(hitl_record)
+                    self.save_analyze_result(frame, status_text, output_path)     
             
             frame_idx += 1
-            # cv2.imshow("Hybrid Fall Detector", frame)
-            
-            # key = cv2.waitKey(0) & 0xFF
-            # if key == ord('q') or key == 27:
-            #     print("Exiting stream...")
-            #     break
             
         cap.release()
