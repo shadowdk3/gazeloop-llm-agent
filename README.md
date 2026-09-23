@@ -19,6 +19,7 @@ HITL dashboard (Streamlit)
   - *The Idea:* Move away from tight, linear loops to decouple frame capture, local preprocessing, LLM reasoning, and HITL alerts.
   - *Implementation:* Built using Python's lightweight `asyncio.Queue` message broker pattern. This ensures that high-speed frame ingestion (from cameras or video streams) never blocks or drops frames while waiting for asynchronous LLM calls, edge validation, or human-in-the-loop (HITL) confirmations.
 - **Human-in-the-Loop (HITL) Review Dashboard:** A built-in Streamlit dashboard (`dashboard.py`) that manages an alert queue (`hitl_alerts_queue.json`), allowing security operators to review snapshots, check AI reasoning reports, and **Confirm** or **Dismiss** alerts.
+- **Human-in-the-Loop (HITL) Review Dashboard & API:** A decoupled architecture consisting of a FastAPI backend interface and a Streamlit dashboard (hitl_dashboard.py). It manages a secure PostgreSQL audit log database with native JSONB support, allowing security operators to filter by status (PENDING, CONFIRMED, DISMISSED), review snapshots, check AI reasoning reports, and record operator notes.
 - **Dual Alert Mechanism:**
     - Automatically invokes the `trigger_alert` tool when Gemini detects an anomaly.
     - Fallback keyword matcher (`alert`, `abnormal`, `fire`, `fall`) scanning the model's text response.
@@ -84,6 +85,8 @@ docker-compose run --rm gazeloop
 ```
 ## SQL
 
+dashboard load data from SQL instead of local file
+
 ```
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
@@ -95,6 +98,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     prev_hash VARCHAR(64) NOT NULL,
     current_hash VARCHAR(64) NOT NULL
 );
+```
+
+```
+uvicorn hitl_api:app --reload --port 8000
+```
+
+```
+streamlit run hitl_dashboard.py
 ```
 
 ## Acknowledgements
