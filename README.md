@@ -82,6 +82,20 @@ or
 ```
 docker-compose run --rm gazeloop
 ```
+## SQL
+
+```
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    snapshot_path TEXT,
+    model_metadata JSONB,
+    llm_payload JSONB,
+    hitl_decision VARCHAR(50) DEFAULT 'PENDING',
+    prev_hash VARCHAR(64) NOT NULL,
+    current_hash VARCHAR(64) NOT NULL
+);
+```
 
 ## Acknowledgements
 
