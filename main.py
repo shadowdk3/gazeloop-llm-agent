@@ -3,6 +3,7 @@ from src.agent import VisionAgent
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
@@ -38,7 +39,8 @@ if __name__ == "__main__":
                 (".mp4", ".avi", ".mov", ".mkv", ".webm")
             ):
             agent = VisionAgent()
-            agent.hybrid_analyze_stream(source=args.input)
+            # agent.hybrid_analyze_stream(source=args.input)
+            asyncio.run(agent.run_async_stream(source=args.input))
 
         # Single image path (e.g., --input data/custom.png)
         else:

@@ -13,6 +13,7 @@ import uuid
 import json
 from datetime import datetime
 from src.local_validator import LocalEdgeValidator
+import asyncio
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -44,6 +45,7 @@ class VisionAgent:
         
         self.model = YOLO("yolo11m.pt")
         self.edge_validator = LocalEdgeValidator(model_name="moondream")
+        self.queue = asyncio.Queue(maxsize=30)
         
     def _inspect_frame_data(self, encoded_img, mime_type) -> bool:
         """
@@ -307,3 +309,151 @@ class VisionAgent:
             frame_idx += 1
             
         cap.release()
+        
+    # --- Asynchronous Frame Producer: Continuous video stream capture ---
+    async def frame_producer(self, source: Union[int, str]):
+        """
+        Continuously captures frames from a video stream (file or camera) 
+        without blocking the main inference loop.
+        """
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            print(f"Error: Unable to open video source: {source}")
+            return
+
+        print("[Producer] Starting real-time video stream capture...")
+        try:
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Handle backpressure: If the processing queue is full,
+                # drop the oldest frame to ensure real-time latency and prevent memory bloat.
+                if self.queue.full():
+                    try:
+                        self.queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+
+                # Asynchronously push the newly captured frame into the queue
+                await self.queue.put(frame)
+                
+                # Yield control back to the asyncio event loop briefly
+                await asyncio.sleep(0.001)
+        finally:
+            cap.release()
+            # Send a 'poison pill' (None) to signal the consumer 
+            # that the video stream has finished.
+            await self.queue.put(None)
+
+    # --- Asynchronous Frame Consumer: Pipeline inference, event validation, and display ---
+    async def frame_consumer(self):
+        """
+        Consumes frames from the queue asynchronously, runs fast YOLO screening,
+        triggers deep verification (rate-limited), and displays the live stream via cv2.imshow.
+        """
+        last_alert_time = 0.0
+        cooldown_period = 1.0  # Cooldown in seconds between expensive model verifications
+        
+        print("[Consumer] Starting inference worker thread and display stream...")
+        
+        # Initialize an auto-fit resizable window before starting the loop
+        # window_name = "Gazeloop Vision Agent - Live Stream"
+        # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow(window_name, 1280, 720)  # Optional initial size
+        
+        try:
+            while True:
+                # Retrieve the next frame from the queue (blocks until a frame is available)
+                frame = await self.queue.get()
+                
+                # Check for the 'poison pill' signaling stream termination
+                if frame is None:
+                    self.queue.task_done()
+                    break
+
+                # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+                
+                try:
+                    # --- Stage 1: Fast Local YOLO Screening (Runs on every frame) ---
+                    results = self.model(frame, classes=[0], verbose=False)
+                    is_potential_fall = False
+
+                    for r in results:
+                        
+                        for box in r.boxes:
+                            coords = box.xyxy[0].cpu().numpy()
+                            x1, y1, x2, y2 = map(int, coords[:4])
+                            conf = float(box.conf[0].cpu())
+                            
+                            # Filter out low-confidence detections
+                            if conf < 0.4:
+                                continue
+                                
+                            # Quick geometric check (e.g., bounding box aspect ratio)
+                            is_potential_fall = src.methods.check_box_aspect_ratio(x1, y1, x2, y2)
+                            box_color = (0, 0, 255) if is_potential_fall else (0, 255, 0)
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+
+                    current_time = time.time()
+                    
+                    # --- Stage 2: Deep Verification & HITL Trigger (Rate-limited by cooldown) ---
+                    if is_potential_fall and (current_time - last_alert_time) >= cooldown_period:
+                        print("--- Potential fall detected: Delegating to edge/cloud model for deep verification ---")
+                        
+                        loop = asyncio.get_running_loop()
+                        
+                        # Run the blocking edge validator call in a separate background thread
+                        hitl_record = await loop.run_in_executor(
+                            None, self.edge_validator.verify_fall_event, frame
+                        )
+                        
+                        # Reset the cooldown timestamp
+                        last_alert_time = current_time
+
+                        # If the deep validation confirms a high-risk event, process the alert
+                        if hitl_record.get("ai_suggested_alert"):
+                            alert_id = hitl_record["alert_id"]
+                            is_alert = hitl_record["ai_suggested_alert"]
+                            file_text = f"HITL_PENDING_ID_{alert_id[:8]}"
+                            
+                            Path("data/snapshots").mkdir(parents=True, exist_ok=True)
+                            output_path = f"data/snapshots/{file_text}.jpg"
+                            hitl_record["image_path"] = output_path
+                            
+                            status_text = self._draw_status(frame, is_alert)
+                            
+                            # Offload I/O-bound disk writing to the background thread pool
+                            await loop.run_in_executor(None, self._save_to_json, hitl_record)
+                            await loop.run_in_executor(None, self.save_analyze_result, frame, status_text, output_path)
+
+                    # --- Stage 3: Real-time Display ---
+                    # Draw normal/safe status if no alert is currently active
+                    if not is_potential_fall:
+                        self._draw_status(frame, is_alert=False)
+
+                    # Render the frame to an OpenCV GUI window
+                    # cv2.imshow(window_name, frame)
+                    
+                    # cv2.waitKey(1) is required to refresh the GUI window and capture keyboard input.
+                    # Press 'q' to break out of the loop early if needed.
+                    # if cv2.waitKey(1) & 0xFF == ord('q'):
+                    #     print("[Consumer] User requested exit via keyboard ('q').")
+                    #     break
+
+                except Exception as e:
+                    print(f"[Consumer Error]: {e}")
+                finally:
+                    # Always notify the queue that processing for this frame is complete
+                    self.queue.task_done()
+                    
+        finally:
+            # Clean up and close any open OpenCV windows when finished
+            # cv2.destroyAllWindows()
+            pass
+
+    async def run_async_stream(self, source: Union[int, str]):
+        producer_task = asyncio.create_task(self.frame_producer(source))
+        consumer_task = asyncio.create_task(self.frame_consumer())
+        await asyncio.gather(producer_task, consumer_task)

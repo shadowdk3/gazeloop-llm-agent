@@ -15,6 +15,9 @@ HITL dashboard (Streamlit)
 - **Hybrid Tiered Detection (YOLO + LLM):** 
   - *Tier 1:* Edge-optimized YOLO inference and geometric bounding box aspect-ratio checks run locally to instantly flag potential anomalies (such as horizontal falls) without hammering the API.
   - *Tier 2:* When triggered, frames are passed to Gemini / Local edge validation using **Ollama** (`llama3.2-vision` or **`moondream`**) for deep contextual verification and tool invocation.
+- **State Machine & Event-Driven Architecture (Async Queue):** 
+  - *The Idea:* Move away from tight, linear loops to decouple frame capture, local preprocessing, LLM reasoning, and HITL alerts.
+  - *Implementation:* Built using Python's lightweight `asyncio.Queue` message broker pattern. This ensures that high-speed frame ingestion (from cameras or video streams) never blocks or drops frames while waiting for asynchronous LLM calls, edge validation, or human-in-the-loop (HITL) confirmations.
 - **Human-in-the-Loop (HITL) Review Dashboard:** A built-in Streamlit dashboard (`dashboard.py`) that manages an alert queue (`hitl_alerts_queue.json`), allowing security operators to review snapshots, check AI reasoning reports, and **Confirm** or **Dismiss** alerts.
 - **Dual Alert Mechanism:**
     - Automatically invokes the `trigger_alert` tool when Gemini detects an anomaly.
