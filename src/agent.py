@@ -14,6 +14,7 @@ import json
 from datetime import datetime
 from src.local_validator import LocalEdgeValidator
 import asyncio
+from src.audit_logger_pg import PGAuditLogger
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -46,6 +47,9 @@ class VisionAgent:
         self.model = YOLO("yolo11m.pt")
         self.edge_validator = LocalEdgeValidator(model_name="moondream")
         self.queue = asyncio.Queue(maxsize=30)
+        
+        # Initialize PostgreSQL Cryptographic Audit Logger
+        self.audit_logger = PGAuditLogger()
         
     def _inspect_frame_data(self, encoded_img, mime_type) -> bool:
         """
@@ -425,6 +429,15 @@ class VisionAgent:
                             status_text = self._draw_status(frame, is_alert)
                             
                             # Offload I/O-bound disk writing to the background thread pool
+                            # log into sql
+                            await loop.run_in_executor(
+                                None, 
+                                self.audit_logger.log_event, 
+                                output_path, 
+                                hitl_record.get("metadata", {}), 
+                                hitl_record, 
+                                "PENDING"
+                            )
                             await loop.run_in_executor(None, self._save_to_json, hitl_record)
                             await loop.run_in_executor(None, self.save_analyze_result, frame, status_text, output_path)
 
