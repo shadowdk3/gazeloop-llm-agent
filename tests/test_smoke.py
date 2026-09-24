@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # basic test
-# 1. checks that the basic project structure and Python files are valid before running more complicated tests
 def test_python_files_compile():
     """Catch Python syntax errors."""
     python_files = list(ROOT.glob("*.py"))
@@ -18,7 +17,6 @@ def test_python_files_compile():
     for path in python_files:
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
-# 2. This checks that you have a non-empty requirements.txt
 def test_requirements_exists():
     """Check that requirements.txt exists and is not empty."""
     requirements = ROOT / "requirements.txt"
@@ -38,8 +36,7 @@ def test_third_party_dependencies_import():
     import json
     import asyncio
     import logging
-
-        
+    
 def test_application_modules_import():
     """Verify application modules can be imported."""
     from src.tools import trigger_alert
