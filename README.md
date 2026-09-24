@@ -72,6 +72,32 @@ docker-compose build --no-cache
 
 ### Run the Container
 
+Ollama is a separate container
+
+** if you have ollama on host machine, stop the service first
+
+```
+sudo systemctl stop ollama
+```
+
+1. First, start Ollama
+
+```
+docker-compose up -d ollama
+```
+
+2. download the model inside the Ollama container
+
+```
+docker-compose exec ollama ollama pull moondream
+```
+
+3. check it
+
+```
+docker-compose exec ollama ollama list
+```
+
 - Input video / camera source
 
 ```
@@ -83,7 +109,26 @@ or
 ```
 docker-compose run --rm gazeloop
 ```
+
+** ollama run in docker, and the it should set to 
+
+```
+OLLAMA_HOST=http://ollama:11434
+```
+
 ## SQL
+
+if run in native machine, edit `.env` and set `PGHOST=localhost`
+
+```
+PGHOST=localhost  
+```
+
+if run in docker
+
+```
+PGHOST=host.docker.internal
+```
 
 dashboard load data from SQL instead of local file
 

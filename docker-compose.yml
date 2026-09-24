@@ -20,6 +20,16 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DISPLAY=${DISPLAY}
 
+      # Ollama is running in Docker
+      - OLLAMA_HOST=http://ollama:11434
+
+      # PostgreSQL is running on the native machine 
+      - PGHOST=host.docker.internal 
+      - PGPORT=5432
+
+    extra_hosts: 
+      - "host.docker.internal:host-gateway"
+
     # Mounts local host directories and sockets into the container path:
     volumes:
       - ./data:/app/data
@@ -36,3 +46,19 @@ services:
 
     # Allocates a pseudo-TTY, enabling colored terminal output and interactive terminal sessions inside the container
     tty: true
+
+    depends_on: 
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: gazeloop-ollama
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+    ports:
+      - "11434:11434"
+
+volumes:
+  ollama_data:
