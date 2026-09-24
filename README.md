@@ -1,6 +1,6 @@
 # GazeLoop
 
-GazeLoop is an intelligent, multimodal AI vision-guard agent powered by Google Gemini 3.6-Flash, local Vision-Language Models (via Ollama), OpenCV, and Python. It inspects surveillance imagery or video streams for safety hazards, triggers automated alerts, and provides interactive manual frame-stepping with real-time status overlays.
+Gazeloop is a real-time, hybrid edge-AI security and safety monitoring system engineered to detect critical anomalies (such as slips, falls, or safety violations) from high-speed video streams.
 
 ![demo1_result](./reference/demo1_result.png)
 ![hybrid_result](./reference/hybrid_result.png)
@@ -9,25 +9,36 @@ HITL dashboard (Streamlit)
 
 ![dashboard_2](./reference/dashboard_2.png)
 
-## Key Features
+## Architecture & Data Flow
 
-- **Multimodal Inspection:** Powered by `gemini-3.6-flash` supporting both JPEG and PNG image frames.
-- **Hybrid Tiered Detection (YOLO + LLM):** 
-  - *Tier 1:* Edge-optimized YOLO inference and geometric bounding box aspect-ratio checks run locally to instantly flag potential anomalies (such as horizontal falls) without hammering the API.
-  - *Tier 2:* When triggered, frames are passed to Gemini / Local edge validation using **Ollama** (`llama3.2-vision` or **`moondream`**) for deep contextual verification and tool invocation.
-- **State Machine & Event-Driven Architecture (Async Queue):** 
-  - *The Idea:* Move away from tight, linear loops to decouple frame capture, local preprocessing, LLM reasoning, and HITL alerts.
-  - *Implementation:* Built using Python's lightweight `asyncio.Queue` message broker pattern. This ensures that high-speed frame ingestion (from cameras or video streams) never blocks or drops frames while waiting for asynchronous LLM calls, edge validation, or human-in-the-loop (HITL) confirmations.
-- **Human-in-the-Loop (HITL) Review Dashboard:** A built-in Streamlit dashboard (`dashboard.py`) that manages an alert queue (`hitl_alerts_queue.json`), allowing security operators to review snapshots, check AI reasoning reports, and **Confirm** or **Dismiss** alerts.
-- **Human-in-the-Loop (HITL) Review Dashboard & API:** A decoupled architecture consisting of a FastAPI backend interface and a Streamlit dashboard (hitl_dashboard.py). It manages a secure PostgreSQL audit log database with native JSONB support, allowing security operators to filter by status (PENDING, CONFIRMED, DISMISSED), review snapshots, check AI reasoning reports, and record operator notes.
-- **Dual Alert Mechanism:**
-    - Automatically invokes the `trigger_alert` tool when Gemini detects an anomaly.
-    - Fallback keyword matcher (`alert`, `abnormal`, `fire`, `fall`) scanning the model's text response.
-- **Interactive Manual Stepping & Cooldowns:** Press any key in the OpenCV window to advance frame-by-frame through images or video streams, or `q` to quit.
-- **On-Screen Status Overlay:** Renders color-coded status badges directly in the bottom-right corner of the frame:
-    - `normal` (Green) — Safe conditions.
-    - `abnormal` (Red) — Hazard or anomaly detected.
-- **Flexible Input Routing:** Switch effortlessly between default static demo images, custom images, or video files.
+```mermaid
+graph TD
+    A["Camera Stream"] --> B["Tier 1: Edge YOLO <br/> (Local Bounding Box & Aspect-Ratio Filter)"]
+    B -- "Anomaly / Trigger" --> C["Tier 2: Multimodal LLM <br/> (Gemini / Local Moondream via Ollama)"]
+    B -- "Normal Frame" --> A
+    C -- "Verified Hazard" --> D[("PostgreSQL <br/> (JSONB Audit Logs & Hashes)")]
+    D --> E["FastAPI REST Backend"]
+    E --> F["Streamlit <br/> (HITL Review Dashboard)"]
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#ff9,stroke:#333,stroke-width:2px
+    style D fill:#f96,stroke:#333,stroke-width:2px
+    style E fill:#9f9,stroke:#333,stroke-width:2px
+    style F fill:#9ff,stroke:#333,stroke-width:2px
+```
+
+## Core Components
+
+1. **Tiered Edge Filtering:** Local YOLO-based bounding box filtering and geometric aspect-ratio checks act as a high-speed filter to catch potential incidents instantly without flooding network bandwidth.
+
+2. **Multimodal LLM Verification:** When an anomaly is suspected, frames are offloaded to Gemini (gemini-3.6-flash) or local edge models (Ollama / Moondream) for deep contextual reasoning and tool-call validation.
+
+3. **Event-Driven Async Queue:** Built using Python's asyncio.Queue message broker pattern to ensure continuous, non-blocking frame ingestion from live streams.
+
+4. **Cryptographic & Structured Audit Trail:** Stores state changes, snapshots, and reasoning payloads securely inside PostgreSQL using native JSONB columns.
+
+5. **HITL Review Dashboard:** A decoupled FastAPI and Streamlit interface enabling security operators to review pending alerts, inspect diagnostic reports, and manage incident lifecycles (PENDING -> CONFIRMED / DISMISSED).
 
 ## Getting Started
 
@@ -41,15 +52,15 @@ HITL dashboard (Streamlit)
 sudo apt-get update && sudo apt-get install -y zstd
 pip install google-genai opencv-python python-dotenv ollama
 curl -fsSL https://ollama.com/install.sh | sh
-ollama run llama3.2-vision
+ollama run moondream
 ```
 
 ### Running the Agent
 
-Place your target images in the project directory (e.g., demo1.png, demo2.png) and run:
+Place your target images in the project directory (e.g., demo_video.mp4) and run:
 
 ```
-python main.py
+python main.py -i demo_video.mp4
 ```
 
 ### Running the Dashboard
@@ -57,8 +68,45 @@ python main.py
 Launch the Streamlit dashboard to review pending AI alerts and inspect captured evidence frames:
 
 ```
-streamlit run dashboard.py
+uvicorn hitl_api:app --reload --port 8000
 ```
+
+```
+streamlit run hitl_dashboard.py
+```
+
+## Running Automated Tests
+
+GazeLoop uses `pytest` for automated testing.
+
+The test suite performs several basic checks:
+
+Verifies that Python source files compile successfully.
+Verifies that requirements.txt exists and is not empty.
+Verifies that required third-party Python packages can be imported.
+Verifies that the main GazeLoop application modules can be imported.
+
+### Install Test Dependencies
+
+Activate your Python virtual environment and install the project dependencies:
+
+```
+source .venv/bin/activate
+
+python -m pip install -r requirements.txt
+```
+
+### Run Tests
+
+From the repository root:
+
+```
+python -m pytest -q
+```
+
+A successful run should report all tests as passing, for example:
+
+4 passed
 
 ## Running with Docker
 
@@ -143,14 +191,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     prev_hash VARCHAR(64) NOT NULL,
     current_hash VARCHAR(64) NOT NULL
 );
-```
-
-```
-uvicorn hitl_api:app --reload --port 8000
-```
-
-```
-streamlit run hitl_dashboard.py
 ```
 
 ## Acknowledgements
