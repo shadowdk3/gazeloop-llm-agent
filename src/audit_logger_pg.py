@@ -2,16 +2,21 @@ import hashlib
 import json
 import psycopg2
 from datetime import datetime
+import os
 
 class PGAuditLogger:
     def __init__(self):
         self.db_config = {
-            "host": "localhost",
-            "database": "gazeloop",
-            "user": "postgres",
-            "password": "123456"
+            "host": os.getenv("PGHOST", "localhost"), 
+            "port": int(os.getenv("PGPORT", "5432")), 
+            "database": os.getenv("PGDATABASE", "gazeloop"), 
+            "user": os.getenv("PGUSER", "postgres"), 
+            "password": os.getenv("PGPASSWORD", "123456"),
         }
 
+        print( f"[AuditLogger] PostgreSQL host: " 
+              f"{self.db_config['host']}:{self.db_config['port']}" )
+        
     def log_event(self, snapshot_path: str, metadata: dict, llm_response: dict, hitl_status: str = "PENDING") -> str:
         """
         Calculates a SHA-256 cryptographic hash chaining to the previous record 

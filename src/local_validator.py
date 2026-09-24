@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 import ollama
 from src.tools import trigger_alert
+import os
 
 class LocalEdgeValidator:
     def __init__(self, model_name: str = "llama3.2-vision"):
@@ -10,9 +11,13 @@ class LocalEdgeValidator:
         Initializes the local vision validator.
         Can be set to 'llama3.2-vision' or 'moondream'.
         """
+        self.ollama_client = ollama.Client(
+            host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        )
         self.model_name = model_name
         print(f"[*] Initialized LocalEdgeValidator using model: {self.model_name}")
-
+        print( f"[*] Ollama host: " f"{os.getenv('OLLAMA_HOST', 'http://localhost:11434')}" )
+        
     def verify_fall_event(self, frame_bgr, image_save_path: str = None) -> dict:
         """
         Takes an OpenCV BGR frame, performs local VLM inference via Ollama,
@@ -31,7 +36,7 @@ class LocalEdgeValidator:
         image_bytes = encoded_img.tobytes()
 
         try:
-            response = ollama.chat(
+            response = self.ollama_client.chat(
                 model=self.model_name,
                 messages=[
                     {
