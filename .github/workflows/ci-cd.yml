@@ -9,6 +9,7 @@ on:
     branches:
       - master
       - ci-cd
+  workflow_dispatch:  # <--- This enables manual/forced triggering from the web UI
 
 jobs:
   # 1. Run Tests First (CI)
