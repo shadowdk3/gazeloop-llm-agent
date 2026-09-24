@@ -1,15 +1,11 @@
 name: CI/CD Pipeline
 
 on:
-  push:
+  push: # Triggers on push to ANY branch
+  pull_request: # Triggers on PRs to ANY branch
     branches:
       - master
-      - ci-cd
-  pull_request:
-    branches:
-      - master
-      - ci-cd
-  workflow_dispatch:  # <--- This enables manual/forced triggering from the web UI
+  workflow_dispatch:
 
 jobs:
   # 1. Run Tests First (CI)
@@ -33,7 +29,7 @@ jobs:
 
   # 2. Build Docker Image (CD) - Only runs if 'test' succeeds
   docker-build:
-    needs: test  # <--- This ensures CI runs first!
+    needs: test  # ensures CI runs first!
     runs-on: ubuntu-latest
 
     steps:
