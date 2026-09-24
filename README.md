@@ -9,7 +9,8 @@ HITL dashboard (Streamlit)
 
 ![dashboard_2](./reference/dashboard_2.png)
 
-## Architecture & Data Flow:
+## Architecture & Data Flow
+
 ```mermaid
 graph TD
     A["Camera Stream"] --> B["Tier 1: Edge YOLO <br/> (Local Bounding Box & Aspect-Ratio Filter)"]
@@ -73,6 +74,39 @@ uvicorn hitl_api:app --reload --port 8000
 ```
 streamlit run hitl_dashboard.py
 ```
+
+## Running Automated Tests
+
+GazeLoop uses `pytest` for automated testing.
+
+The test suite performs several basic checks:
+
+Verifies that Python source files compile successfully.
+Verifies that requirements.txt exists and is not empty.
+Verifies that required third-party Python packages can be imported.
+Verifies that the main GazeLoop application modules can be imported.
+
+### Install Test Dependencies
+
+Activate your Python virtual environment and install the project dependencies:
+
+```
+source .venv/bin/activate
+
+python -m pip install -r requirements.txt
+```
+
+### Run Tests
+
+From the repository root:
+
+```
+python -m pytest -q
+```
+
+A successful run should report all tests as passing, for example:
+
+4 passed
 
 ## Running with Docker
 
