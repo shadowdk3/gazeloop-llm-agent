@@ -5,6 +5,26 @@ import ollama
 from src.tools import trigger_alert
 import os
 
+content = """
+Analyze this surveillance image for a possible fall.
+
+Do not guess or speculate.
+
+Return ONLY JSON:
+
+{
+  "posture": "walking | standing | sitting | lying | falling",
+  "body_contact_with_ground": true | false,
+  "movement": "normal | unstable | falling | unknown",
+  "fall_detected": true | false,
+  "confidence": 0.0
+}
+
+A fall should only be detected if there is visible evidence that
+the person is falling or has fallen. A person walking with bent
+legs or outstretched arms is NOT sufficient evidence of a fall.
+"""
+
 class LocalEdgeValidator:
     def __init__(self, model_name: str = "llama3.2-vision"):
         """
@@ -41,13 +61,7 @@ class LocalEdgeValidator:
                 messages=[
                     {
                         "role": "user",
-                        "content": (
-                            "Analyze this surveillance frame. Is there a person who has "
-                            "fallen down, slipped, or lying flat on the ground in distress? "
-                            "Your response must start with 'YES:' or 'NO:', followed by a comprehensive, detailed "
-                            "explanation of what you observe in the image, why it indicates a fall or safe posture, "
-                            "and your assessed risk severity."
-                        ),
+                        "content": (content),
                         "images": [image_bytes]
                     }
                 ]
