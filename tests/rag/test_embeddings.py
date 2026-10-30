@@ -1,12 +1,23 @@
+from unittest.mock import patch
+
 from src.rag.embeddings import EmbeddingService
 
 """
 verify embedding service can successfully convert text into a numerical embedding vector
 """
 
-def test_embedding():
+# temporarily replaces the real Ollama embedding function with a mock.
+@patch("src.rag.embeddings.ollama.embeddings")
+def test_embedding(mock_embeddings):
     """Verify that the embedding service generates a valid vector."""
 
+    expected_vector = [0.1] * 768
+
+    # Simulate the response returned by Ollama
+    mock_embeddings.return_value = {
+        "embedding": expected_vector
+    }
+    
     embedder = EmbeddingService()
 
     text = (
@@ -34,13 +45,25 @@ def test_embedding():
         for value in vector
     )
 
+    mock_embeddings.assert_called_once_with(
+        model="nomic-embed-text",
+        prompt=text
+    )
+    
     print("Vector dimensions:", len(vector))
     print("First 5 values:", vector[:5])
     
-def test_embedding_consistency():
+@patch("src.rag.embeddings.ollama.embeddings")
+def test_embedding_consistency(mock_embeddings):
     """
     check whether the same text produces consistent embeddings.
     """
+    
+    expected_vector = [0.2] * 768
+
+    mock_embeddings.return_value = {
+        "embedding": expected_vector
+    }
     
     embedder = EmbeddingService()
 
