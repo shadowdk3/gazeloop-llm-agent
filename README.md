@@ -180,6 +180,8 @@ PGHOST=host.docker.internal
 
 dashboard load data from SQL instead of local file
 
+1. HITL database
+
 ```
 CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,

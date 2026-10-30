@@ -128,8 +128,6 @@ python -m src.rag.ingest
 
 This processes fall_response.md, generates embeddings, and stores the knowledge chunks in PostgreSQL.
 
-**Note: The script inserts the document's chunks. It does not clear or upsert existing rows, so running it repeatedly can create duplicates.**
-
 6. Retrieval & Generation
 
 After ingestion:
@@ -141,6 +139,37 @@ After ingestion:
 
 Send the prompt to the configured LLM to generate recommendations.
 
+## SQL
+
+1. Create vector database
+
+- Install PostgreSQL 16 pgvector
+
+```
+sudo apt install postgresql-16-pgvector
+```
+
+- Enable pgvector
+
+```
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+```
+CREATE TABLE knowledge_chunks (
+    id SERIAL PRIMARY KEY,
+
+    document_name TEXT NOT NULL,
+
+    section TEXT NOT NULL,
+
+    content TEXT NOT NULL,
+
+    embedding VECTOR(768),
+
+    metadata JSONB
+);
+```
 ## Current limitations
 
 - Chunking splits on Markdown `##` headings and uses the first line of each resulting section as its title. Text before the first heading is not reliably treated as a preamble.

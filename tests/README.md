@@ -9,6 +9,7 @@ The project uses `pytest`. The tests cover the RAG embedding, retrieval, and pro
 | `test_smoke.py` | Parses Python source files under the repository root and `src`, checks that `requirements.txt` is non-empty, imports selected third-party packages, and imports selected application modules. | No Ollama or PostgreSQL calls |
 | `rag/test_chunking.py` | Splits a Markdown knowledge document into sections using level-2 headings (##). Checks that section titles and content are extracted correctly. | None |
 | `rag/test_embeddings.py` | Tests whether `EmbeddingService` generates a valid 768-dimensional embedding vector. Checks that the vector is non-empty, contains numerical values, and has no NaN or infinite values. Also prints the vector dimensions and first five values. | Ollama with `nomic-embed-text` |
+| `rag/test_ingest.py` | Tests the document ingestion process using mocked database and embedding services. Checks that embeddings are generated for each chunk, SQL INSERT statements are executed, database changes are committed, and existing documents are skipped to prevent duplicate ingestion. | None (uses `unittest.mock` to simulate PostgreSQL and Ollama) |
 
 There is currently no dedicated test for document ingestion, ranking quality, database error handling, or the final answer produced by the language model.
 
@@ -49,7 +50,20 @@ python -m pytest tests/test_smoke.py -q
 ```
 python -m pytest tests/rag/test_chunking.py -vs
 python -m pytest tests/rag/test_embeddings.py -vs
+python -m pytest tests/rag/test_ingest.py -vs
 ```
+
+- inspect PostgreSQL
+
+```
+gazeloop=# SELECT
+    id,
+    document_name,
+    section,
+    vector_dims(embedding) AS dimensions
+FROM knowledge_chunks;
+```
+
 
 ## Interpreting failures
 
