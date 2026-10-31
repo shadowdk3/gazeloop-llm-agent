@@ -5,7 +5,16 @@ import ollama
 from src.tools import trigger_alert
 import os
 
-content = """
+from src.rag.retriever import RAGRetriever
+
+classification_prompt = """
+Is there clear visual evidence that a person is falling
+or has fallen?
+
+Answer only YES or NO.
+"""
+
+description_prompt = """
 Analyze this surveillance image for a possible fall.
 
 Do not guess or speculate.
@@ -35,6 +44,9 @@ class LocalEdgeValidator:
             host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
         )
         self.model_name = model_name
+        
+        self.retriever = RAGRetriever()
+        
         print(f"[*] Initialized LocalEdgeValidator using model: {self.model_name}")
         print( f"[*] Ollama host: " f"{os.getenv('OLLAMA_HOST', 'http://localhost:11434')}" )
         
@@ -56,12 +68,24 @@ class LocalEdgeValidator:
         image_bytes = encoded_img.tobytes()
 
         try:
+            # First call: Fall classification
+            verdict_response = self.ollama_client.chat(
+                model=self.model_name,
+                messages=[{
+                    "role": "user",
+                    "content": (classification_prompt),
+                    "images": [image_bytes]
+                }]
+            )
+
+            verdict = verdict_response.message.content.strip().upper()
+
             response = self.ollama_client.chat(
                 model=self.model_name,
                 messages=[
                     {
                         "role": "user",
-                        "content": (content),
+                        "content": (description_prompt),
                         "images": [image_bytes]
                     }
                 ]
@@ -71,8 +95,11 @@ class LocalEdgeValidator:
             raw_text = message_obj.get("content", "").strip()
             print(f"[Local VLM Verdict]: {raw_text}")
             
+            # Convert the VLM description into an embedding and retrieve matching guidelines
+            embedding_chuck= self.retriever.retrieve(raw_text, top_k=3)
+
             # Determine if an alert is suggested based on whether the text starts with 'YES'
-            is_suggested_alert = raw_text.upper().startswith("YES")
+            is_suggested_alert = verdict.upper().startswith("YES")
             
             # Build the suggested action structure
             severity = "High" if is_suggested_alert else "Low"
@@ -90,10 +117,28 @@ class LocalEdgeValidator:
                 "image_path": image_save_path,  
                 "ai_suggested_alert": is_suggested_alert,
                 "suggested_action": suggested_action,
+                
+                # Original VLM output
                 "gemini_response": {
                     "text": raw_text,
                     "function_calls": []  # Local VLM can keep function calls empty if unsupported
                 },
+                
+                # RAG results
+                "rag": {
+                    "query": raw_text,
+                    "retrieved_chunks": [
+                        {
+                            "document_name": chunk.document_name,
+                            "section": chunk.section,
+                            "content": chunk.content,
+                            "similarity": chunk.similarity
+                        }
+                        for chunk in embedding_chuck
+                    ],
+                    "llm_analysis": raw_text  # Fill after sending the RAG prompt to the LLM
+                },
+    
                 "hitl_status": "PENDING" if is_suggested_alert else "AUTO_PASSED",
                 "human_review": {
                     "reviewed_by": None,
@@ -143,6 +188,14 @@ class LocalEdgeValidator:
                 "text": "",
                 "function_calls": []
             },
+            
+            # RAG results
+            "rag": {
+                "query": None,
+                "retrieved_chunks": [],
+                "llm_analysis": None
+            },
+
             "hitl_status": "ERROR",
             "human_review": {
                 "reviewed_by": None,
