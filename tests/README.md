@@ -10,6 +10,7 @@ The project uses `pytest`. The tests cover the RAG embedding, retrieval, and pro
 | `rag/test_chunking.py` | Splits a Markdown knowledge document into sections using level-2 headings (##). Checks that section titles and content are extracted correctly. | None |
 | `rag/test_embeddings.py` | Tests whether `EmbeddingService` generates a valid 768-dimensional embedding vector. Checks that the vector is non-empty, contains numerical values, and has no NaN or infinite values. Also prints the vector dimensions and first five values. | Ollama with `nomic-embed-text` |
 | `rag/test_ingest.py` | Tests the document ingestion process using mocked database and embedding services. Checks that embeddings are generated for each chunk, SQL INSERT statements are executed, database changes are committed, and existing documents are skipped to prevent duplicate ingestion. | None (uses `unittest.mock` to simulate PostgreSQL and Ollama) |
+| `rag/test_retriever.py` | Tests the guideline retrieval process using mocked embedding and database services. Checks that incident descriptions are passed to the embedding service, retrieved chunks are converted into `RetrievedChunk` objects, and the expected results and similarity scores are returned for different incident scenarios. | None (uses `unittest.mock` to simulate Ollama embeddings and PostgreSQL query results) |
 
 There is currently no dedicated test for document ingestion, ranking quality, database error handling, or the final answer produced by the language model.
 
@@ -51,6 +52,7 @@ python -m pytest tests/test_smoke.py -q
 python -m pytest tests/rag/test_chunking.py -vs
 python -m pytest tests/rag/test_embeddings.py -vs
 python -m pytest tests/rag/test_ingest.py -vs
+python -m pytest tests/rag/test_retriever.py -vs
 ```
 
 - inspect PostgreSQL
