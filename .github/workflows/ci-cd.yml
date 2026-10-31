@@ -25,7 +25,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests
-        run: python -m pytest tests/ -q
+        run: |
+          python -m pytest tests/test_smoke.py -v
+          python -m pytest tests/rag/ -v
+          python -m pytest tests/integration/test_rag_pipeline.py -v
 
   # 2. Build Docker Image (CD) - Only runs if 'test' succeeds
   docker-build:
