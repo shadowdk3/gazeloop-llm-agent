@@ -12,6 +12,8 @@ The project uses `pytest`. The tests cover the RAG embedding, retrieval, and pro
 | `rag/test_ingest.py` | Tests the document ingestion process using mocked database and embedding services. Checks that embeddings are generated for each chunk, SQL INSERT statements are executed, database changes are committed, and existing documents are skipped to prevent duplicate ingestion. | None (uses `unittest.mock` to simulate PostgreSQL and Ollama) |
 | `rag/test_retriever.py` | Tests the guideline retrieval process using mocked embedding and database services. Checks that incident descriptions are passed to the embedding service, retrieved chunks are converted into `RetrievedChunk` objects, and the expected results and similarity scores are returned for different incident scenarios. | None (uses `unittest.mock` to simulate Ollama embeddings and PostgreSQL query results) |
 | `rag/test_prompt.py` | Tests the safety prompt generation process using predefined visual descriptions and mocked retrieved guideline chunks. Checks that visual observations, guideline content, document names, and section headings are correctly included in the generated prompt, and that empty retrieval results are handled. | None (uses predefined test data; no external services required) |
+| `integration/test_rag_pipeline.py` | Tests the interaction between the retriever and prompt builder using mocked retrieval results. Checks that retrieved guideline chunks are included in the final prompt and that the pipeline passes the expected incident description to the retriever. | None (uses mocked retrieval results) |
+| `integration/test_rag_pipeline_real.py` | Tests the RAG retrieval and prompt-building workflow using the actual embedding service and PostgreSQL database. Checks that relevant chunks are retrieved and included in the generated prompt. | `Ollama` and `PostgreSQL` with pgvector |
 
 There is currently no dedicated test for document ingestion, ranking quality, database error handling, or the final answer produced by the language model.
 
@@ -57,6 +59,18 @@ python -m pytest tests/rag/test_retriever.py -vs
 python -m pytest tests/rag/test_prompt.py -vs
 ```
 
+- Run the mocked pipeline test:
+
+```
+python -m pytest tests/integration/test_rag_pipeline.py -vs
+```
+
+- Run the real pipeline test (requires Ollama and PostgreSQL):
+
+```
+python -m pytest tests/integration/test_rag_pipeline_real.py -vs
+```
+
 - inspect PostgreSQL
 
 ```
@@ -75,3 +89,16 @@ FROM knowledge_chunks;
 - Retrieval and prompt tests can fail if PostgreSQL is unavailable, the connection variables are incorrect, pgvector/the table is missing, or no chunks have been ingested.
 - A non-empty-result assertion checks only that a result was returned. It does not measure whether the result is relevant or whether the recommendation is safe.
 - The CI workflow currently runs `python -m pytest tests/ -q`; it therefore needs the external RAG services and data unless those tests are later changed to use mocks or service containers.
+
+
+## Continuous Integration (CI)
+
+The CI workflow should run the smoke checks, unit tests, and mocked pipeline test. These tests do not require Ollama or PostgreSQL.
+
+For example:
+
+```
+python -m pytest tests/test_smoke.py tests/rag/ tests/integration/test_rag_pipeline.py -q
+```
+
+The real pipeline test `(test_rag_pipeline_real.py)` is intended to run locally because it requires running `Ollama` and `PostgreSQL` services. Do not include it in the default CI test command unless those services are configured in the CI environment.
