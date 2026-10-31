@@ -51,7 +51,7 @@ def get_alerts(status: Optional[str] = None):
                 "timestamp": row[1].isoformat() if row[1] else "",
                 "image_path": row[2],
                 "suggested_action": row[3] if isinstance(row[3], dict) else {},
-                "gemini_response": row[4] if isinstance(row[4], dict) else {},
+                "payload": row[4] if isinstance(row[4], dict) else {},
                 "hitl_status": row[5],
                 "current_hash": row[6]
             })

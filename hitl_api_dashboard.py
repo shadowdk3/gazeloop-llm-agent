@@ -40,6 +40,33 @@ def update_alert_decision(alert_id: str, decision: str, operator_name: str, note
     except Exception as e:
         st.error(f"Connection error during update: {e}")
 
+def rag_safety_assessment_report(rag):
+    st.subheader("RAG Safety Assessment Report")
+    # 1. Visual observation
+    st.markdown("### 1. Visual Observation")
+
+    visual_description = rag.get("query", "No visual description available.")
+    st.write(visual_description)
+
+    # 2. Retrieved safety guidelines
+    st.markdown("### 2. Retrieved Safety Guidelines")
+
+    retrieved_chunks = rag.get("retrieved_chunks", [])
+
+    if retrieved_chunks:
+        for i, chunk in enumerate(retrieved_chunks, 1):
+            with st.expander(
+                f"{i}. {chunk.get('document_name', 'Unknown')} "
+                f"- {chunk.get('section', 'Unknown section')}"
+            ):
+                st.write(chunk.get("content", ""))
+
+                similarity = chunk.get("similarity")
+                if similarity is not None:
+                    st.caption(f"Similarity score: {similarity:.3f}")
+    else:
+        st.info("No relevant safety guidelines were retrieved.")
+        
 # --- Sidebar Configuration ---
 st.sidebar.title("Control Panel")
 operator = st.sidebar.text_input("Operator Name / ID", value="Operator_01")
@@ -75,8 +102,9 @@ else:
         status = record.get("hitl_status", "UNKNOWN")
         timestamp = record.get("timestamp", "")
         img_path = record.get("image_path", "")
-        suggested_action = record.get("suggested_action") or {}
+        suggested_action = record["payload"].get("suggested_action") or {}
         gemini_resp = record.get("gemini_response", {})
+        rag = record["payload"].get("rag") or {}
 
         border_color = "red" if status == "PENDING" else ("green" if status == "CONFIRMED" else "gray")
 
@@ -98,10 +126,12 @@ else:
                 reason = suggested_action.get("reason", "No detailed reason provided")
                 severity = suggested_action.get("severity", "Medium")
                 
-                st.write(f"**Suggested Action:** `{suggested_action.get('tool_name', 'N/A')}`")
+                st.write(f"**Tool Name:** `{suggested_action.get('tool_name', 'N/A')}`")
                 st.write(f"**Risk Level (Severity):** `{severity}`")
                 st.write(f"**Analysis Reasoning:** {reason}")
-
+                
+                rag_safety_assessment_report(rag)
+                
                 if gemini_resp.get("function_calls"):
                     st.json(gemini_resp["function_calls"])
                 elif gemini_resp.get("text"):
