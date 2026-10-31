@@ -15,6 +15,20 @@ The Streamlit dashboard allows operators to review alerts, inspect visual eviden
 
 ![dashboard_2](./reference/dashboard_rag.png)
 
+## Tools and technologies
+
+| Area | Tools / technologies |
+| --------- | ----------- |
+| Computer vision	| YOLO, OpenCV |
+| Vision-language models | Gemini, Moondream |
+| Local model runtime | Ollama |
+| RAG and embeddings | LangChain concepts, nomic-embed-text, vector similarity search |
+| Database | PostgreSQL, pgvector, JSONB | 
+| Backend API | FastAPI |
+| Dashboard	| Streamlit |
+| Testing | pytest, mocked integration tests |
+| CI/CD | GitHub Actions |
+
 ## Architecture & Data Flow
 
 ```mermaid
