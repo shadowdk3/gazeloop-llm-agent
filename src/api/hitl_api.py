@@ -101,9 +101,15 @@ def update_alert(alert_id: int, review: ReviewRequest):
         )
         conn.commit()
         return {"status": "success", "alert_id": alert_id, "new_decision": review.decision}
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update alert"
+        )
     finally:
         cursor.close()
         conn.close()
