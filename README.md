@@ -86,11 +86,11 @@ python main.py -i demo_video.mp4
 Launch the Streamlit dashboard to review pending AI alerts and inspect captured evidence frames:
 
 ```
-uvicorn hitl_api:app --reload --port 8000
+uvicorn src.api.hitl_api:app --reload --port 8000
 ```
 
 ```
-streamlit run hitl_dashboard.py
+streamlit run dashboard/hitl_api_dashboard.py
 ```
 
 ## Running Automated Tests

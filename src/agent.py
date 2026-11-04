@@ -30,6 +30,13 @@ MAX_RETRIES = 5
 DELAY_SECOND = 5
 INTERVAL_SECOND = 5.0
 
+PROJECT_PATH = Path(__file__).resolve().parent.parent
+
+LOG_DIR = PROJECT_PATH / "logs" / "json"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+JSON_PATH = LOG_DIR / "hitl_alerts_queue.json"
+
 class VisionAgent:
     def __init__(self, image_paths: List[Union[str, Path]] = None):
         self.client = genai.Client()
@@ -163,6 +170,7 @@ class VisionAgent:
 
             logs.append(data)
 
+            print(output_filepath)
             with open(output_filepath, "w", encoding="utf-8") as f:
                 json.dump(logs, f, ensure_ascii=False, indent=2)
                 
@@ -309,7 +317,7 @@ class VisionAgent:
                     hitl_record["image_path"] = output_path
                     
                     status_text = self._draw_status(frame, is_alert)    
-                    self._save_to_json(hitl_record)
+                    self._save_to_json(hitl_record, output_filepath=JSON_PATH)
                     self.save_analyze_result(frame, status_text, output_path)     
             
             frame_idx += 1
@@ -440,7 +448,7 @@ class VisionAgent:
                                 hitl_record, 
                                 "PENDING"
                             )
-                            await loop.run_in_executor(None, self._save_to_json, hitl_record)
+                            await loop.run_in_executor(None, self._save_to_json, hitl_record, JSON_PATH)
                             await loop.run_in_executor(None, self.save_analyze_result, frame, status_text, output_path)
 
                     # --- Stage 3: Real-time Display ---
