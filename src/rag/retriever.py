@@ -30,8 +30,8 @@ class RAGRetriever:
             host=os.getenv("POSTGRES_HOST", "localhost"),
             port=int(os.getenv("POSTGRES_PORT", "5432")),
             database=os.getenv("POSTGRES_DB", "gazeloop"),
-            user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("PGPASSWORD", "123456"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("PGPASSWORD"),
         )
 
     def retrieve(self, query: str, top_k: int = 3):
