@@ -10,8 +10,8 @@ class PGAuditLogger:
             "host": os.getenv("PGHOST", "localhost"), 
             "port": int(os.getenv("PGPORT", "5432")), 
             "database": os.getenv("PGDATABASE", "gazeloop"), 
-            "user": os.getenv("PGUSER", "postgres"), 
-            "password": os.getenv("PGPASSWORD", "123456"),
+            "user": os.getenv("PGUSER"), 
+            "password": os.getenv("PGPASSWORD"),
         }
 
         print( f"[AuditLogger] PostgreSQL host: " 
