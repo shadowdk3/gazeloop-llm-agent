@@ -2,15 +2,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from typing import Optional, List, Dict, Any
+import os
+
+from pathlib import Path
+from dotenv import load_dotenv
 
 app = FastAPI(title="Gazeloop HITL Audit API", version="1.0")
 
-DB_CONFIG = {
-    "host": "localhost",
-    "database": "gazeloop",
-    "user": "postgres",
-    "password": "123456"
-}
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 class ReviewRequest(BaseModel):
     decision: str  # e.g., "CONFIRMED" or "DISMISSED"
@@ -18,7 +17,13 @@ class ReviewRequest(BaseModel):
     notes: Optional[str] = ""
 
 def get_db_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "gazeloop"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("PGPASSWORD"),
+    )
 
 # Fetching Alerts Endpoint (GET /api/alerts)
 # 1. Queries your audit_logs table in PostgreSQL, sorting records in descending order (ORDER BY id DESC) 
