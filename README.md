@@ -1,8 +1,10 @@
 # GazeLoop
 
-Gazeloop is a real-time, hybrid edge-AI security and safety monitoring system engineered to detect critical anomalies (such as slips, falls, or safety violations) from high-speed video streams.
+Gazeloop is a real-time, hybrid edge-AI security and safety monitoring system engineered to detect critical anomalies (such as slips, falls, or safety violations) from video streams.
 
 It combines local computer vision, multimodal vision-language models (VLMs), retrieval-augmented generation (RAG), and human-in-the-loop (HITL) review to support safety monitoring and incident assessment.
+
+The system uses a tiered architecture to balance detection reliability, inference latency, and computational efficiency. Local computer vision handles initial screening, while more computationally expensive AI models are invoked only when additional analysis is required.
 
 ## Demo
 
@@ -22,26 +24,29 @@ The Streamlit dashboard allows operators to review alerts, inspect visual eviden
 | Computer vision	| YOLO, OpenCV |
 | Vision-language models | Gemini, Moondream |
 | Local model runtime | Ollama |
+| LLM Verification | Qwen3 |
 | RAG and embeddings | LangChain concepts, nomic-embed-text, vector similarity search |
 | Database | PostgreSQL, pgvector, JSONB | 
 | Backend API | FastAPI |
 | Dashboard	| Streamlit |
 | Testing | pytest, mocked integration tests |
 | CI/CD | GitHub Actions |
+| Containerization | Docker, Docker Compose |
 
 ## Architecture & Data Flow
 
 ```mermaid
 graph TD
     A["Camera Stream"] --> B["Tier 1: Edge YOLO <br/> (Local Bounding Box & Aspect-Ratio Filter)"]
-    B -- "Anomaly / Trigger" --> C["Tier 2: Multimodal LLM <br/> (Gemini / Local Moondream via Ollama)"]
+    B -- "Anomaly / Trigger" --> C["Tier 2: Multimodal LLM <br/> (Gemini / Local Moondream via Ollama)"] 
     B -- "Normal Frame" --> A
-    C --> G["RAG System<br/>(Retrieve Safety Guidelines)"]
+    C --> F["Conditional Qwen Verification<br/>Independent Consistency Check"]
+    F --> G["RAG System<br/>(Retrieve Safety Guidelines)"]
     G --> H["LLM Safety Analysis<br/>(Guideline-supported Assessment)"]
 
     H -- "Verified Hazard" --> D[("PostgreSQL <br/> (JSONB Audit Logs & Hashes)")]
     D --> E["FastAPI REST Backend"]
-    E --> F["Streamlit <br/> (HITL Review Dashboard)"]
+    E --> I["Streamlit <br/> (HITL Review Dashboard)"]
 ```
 
 ## Core Components

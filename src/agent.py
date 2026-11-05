@@ -15,8 +15,11 @@ from ultralytics import YOLO
 from datetime import datetime
 
 from src.audit_logger_pg import PGAuditLogger
-from src.tools import trigger_alert
+from src.tools import trigger_alert, get_logger
 from src.local_validator import LocalEdgeValidator
+from src.agents.safety_verifier import SafetyVerifier
+
+logger = get_logger("vision_agent")
 
 # Define alert keywords separately
 ALERT_KEYWORDS = [
@@ -55,6 +58,7 @@ class VisionAgent:
         
         self.model = YOLO("yolo11m.pt")
         self.edge_validator = LocalEdgeValidator(model_name="moondream")
+        self.safety_verifier = SafetyVerifier(model_name="qwen3:4b")
         self.queue = asyncio.Queue(maxsize=30)
         
         # Initialize PostgreSQL Cryptographic Audit Logger
@@ -389,11 +393,15 @@ class VisionAgent:
 
                 # frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
                 
+                # Keep an unmodified image for Moondream inference
+                original_frame = frame.copy()
+
                 try:
                     # --- Stage 1: Fast Local YOLO Screening (Runs on every frame) ---
                     results = self.model(frame, classes=[0], verbose=False)
                     is_potential_fall = False
-
+                    detections = []
+                    
                     for r in results:
                         
                         for box in r.boxes:
@@ -406,10 +414,24 @@ class VisionAgent:
                                 continue
                                 
                             # Quick geometric check (e.g., bounding box aspect ratio)
-                            is_potential_fall = src.methods.check_box_aspect_ratio(x1, y1, x2, y2)
+                            potential_fall = src.methods.check_box_aspect_ratio(x1, y1, x2, y2)
+                            
+                            # Preserve detections from all boxes
+                            is_potential_fall = is_potential_fall or potential_fall
+                            
+                            detections.append({
+                                "class": "person",
+                                "confidence": conf,
+                                "bbox": [x1, y1, x2, y2],
+                                "potential_fall": bool(potential_fall)
+                            })
+        
                             box_color = (0, 0, 255) if is_potential_fall else (0, 255, 0)
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-
+                            # cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+                            cv2.rectangle(
+                                frame, (x1, y1), (x2, y2), box_color, 2
+                            )
+                                                
                     current_time = time.time()
                     
                     # --- Stage 2: Deep Verification & HITL Trigger (Rate-limited by cooldown) ---
@@ -418,9 +440,24 @@ class VisionAgent:
                         
                         loop = asyncio.get_running_loop()
                         
+                        # Start measuring Moondream execution time
+                        moondream_start = time.perf_counter()
+
                         # Run the blocking edge validator call in a separate background thread
                         hitl_record = await loop.run_in_executor(
                             None, self.edge_validator.verify_fall_event, frame
+                        )
+                        
+                        # Calculate elapsed time
+                        moondream_time = time.perf_counter() - moondream_start
+
+                        if not isinstance(hitl_record, dict):
+                            print("[Warning] Invalid response from edge validator")
+                            continue
+        
+                        logger.info(
+                            "[Moondream] Verification completed | Time: %.3f seconds",
+                            moondream_time
                         )
                         
                         # Reset the cooldown timestamp
@@ -436,6 +473,45 @@ class VisionAgent:
                             output_path = f"data/snapshots/{file_text}.jpg"
                             hitl_record["image_path"] = output_path
                             
+                            # --- Stage 3: Independent LLM Verification ---
+                            try:
+                                logger.info(
+                                    "Starting Qwen consistency check...",
+                                )
+                                
+                                qwen_start = time.perf_counter()
+                                
+                                verification = await loop.run_in_executor(
+                                    None,
+                                    self.safety_verifier.verify,
+                                    detections,
+                                    hitl_record
+                                )
+
+                                qwen_time = time.perf_counter() - qwen_start
+                                
+                            except Exception as e:
+                                print(f"[Safety Verifier Error]: {e}")
+
+                                verification = {
+                                    "status": "UNCERTAIN",
+                                    "reason": "Independent verification failed",
+                                    "issues": [],
+                                    "recommendation": "HUMAN_REVIEW"
+                                }
+                            
+                            # Attach verification result BEFORE saving
+                            hitl_record["safety_verification"] = verification
+                            
+                            logger.info(
+                                "Qwen completed | "
+                                "Status: %s | Time: %.3fs | Reason: %s",
+                                verification.get("status"),
+                                qwen_time,
+                                verification.get("reason")
+                            )
+
+                            # --- Stage 4: Save and trigger HITL ---
                             status_text = self._draw_status(frame, is_alert)
                             
                             # Offload I/O-bound disk writing to the background thread pool
@@ -450,8 +526,8 @@ class VisionAgent:
                             )
                             await loop.run_in_executor(None, self._save_to_json, hitl_record, JSON_PATH)
                             await loop.run_in_executor(None, self.save_analyze_result, frame, status_text, output_path)
-
-                    # --- Stage 3: Real-time Display ---
+        
+                    # --- Stage 5: Real-time Display ---
                     # Draw normal/safe status if no alert is currently active
                     if not is_potential_fall:
                         self._draw_status(frame, is_alert=False)
