@@ -16,26 +16,33 @@ logging.basicConfig(
     ]
 )
 
-# --- MUTE NOISY THIRD-PARTY SDK LOGS ---
-logging.getLogger("google").setLevel(logging.WARNING)
-logging.getLogger("google.genai").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
+logger = logging.getLogger("gazeloop")
+
+# Mute noisy third-party SDK logs
+for name in ["google", "google.genai", "httpx", "httpcore"]:
+    logging.getLogger(name).setLevel(logging.WARNING)
+
+def get_logger(name: str) -> logging.Logger:
+    """Get a logger for a GazeLoop component."""
+    return logging.getLogger(f"gazeloop.{name}")
 
 def trigger_alert(reason: str, severity: str = "Medium") -> str:
     """
-    Trigger an alert and log the details to a local log file.
-
-    Args:
-        reason: Description of the alert cause
-        severity: Severity level (e.g., Low, Medium, High)
+    Trigger an alert and record it in the application log.
     """
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    log_entry = (
-        f"[{timestamp}] [Severity: {severity}] Alert triggered: {reason}\n"
+    timestamp = datetime.datetime.now().isoformat(
+        timespec="seconds"
     )
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(log_entry)
 
-    return f"Successfully logged: {reason} (Level: {severity})"
+    log_message = (
+        f"Alert triggered | Severity: {severity} | "
+        f"Reason: {reason}"
+    )
+
+    logger.warning(log_message)
+
+    return (
+        f"Successfully logged: {reason} "
+        f"(Level: {severity}) at {timestamp}"
+    )

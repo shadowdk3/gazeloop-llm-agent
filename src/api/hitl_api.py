@@ -6,10 +6,15 @@ import os
 
 from pathlib import Path
 from dotenv import load_dotenv
+from src.tools import get_logger
+from psycopg2.extras import Json
+
+logger = get_logger("hitl")
 
 app = FastAPI(title="Gazeloop HITL Audit API", version="1.0")
 
-load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+loaded = load_dotenv(env_path)
 
 class ReviewRequest(BaseModel):
     decision: str  # e.g., "CONFIRMED" or "DISMISSED"
@@ -17,12 +22,18 @@ class ReviewRequest(BaseModel):
     notes: Optional[str] = ""
 
 def get_db_connection():
+    db_user = os.getenv("PGUSER")
+    db_password = os.getenv("PGPASSWORD")
+
+    if not db_user or not db_password:
+        raise RuntimeError("Database credentials are not configured")
+    
     return psycopg2.connect(
         host=os.getenv("POSTGRES_HOST", "localhost"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
         database=os.getenv("POSTGRES_DB", "gazeloop"),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("PGPASSWORD"),
+        user=db_user,
+        password=db_password,
     )
 
 # Fetching Alerts Endpoint (GET /api/alerts)
@@ -35,17 +46,33 @@ def get_db_connection():
 @app.get("/api/alerts", response_model=List[Dict[str, Any]])
 def get_alerts(status: Optional[str] = None):
     """Fetch audit logs/alerts from PostgreSQL, optionally filtered by status."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    
+    conn = None
+    cursor = None
+    
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
         if status and status != "ALL":
             cursor.execute(
-                "SELECT id, timestamp, snapshot_path, model_metadata, llm_payload, hitl_decision, current_hash FROM audit_logs WHERE hitl_decision = %s ORDER BY id DESC",
+                """
+                SELECT id, timestamp, snapshot_path, model_metadata, 
+                    llm_payload, hitl_decision, current_hash 
+                FROM audit_logs
+                WHERE hitl_decision = %s 
+                ORDER BY id DESC
+                """,
                 (status,)
             )
         else:
             cursor.execute(
-                "SELECT id, timestamp, snapshot_path, model_metadata, llm_payload, hitl_decision, current_hash FROM audit_logs ORDER BY id DESC"
+                """
+                SELECT id, timestamp, snapshot_path, model_metadata, 
+                    llm_payload, hitl_decision, current_hash 
+                FROM audit_logs 
+                ORDER BY id DESC
+                """
             )
         rows = cursor.fetchall()
         
@@ -61,9 +88,18 @@ def get_alerts(status: Optional[str] = None):
                 "current_hash": row[6]
             })
         return alerts
+    except Exception:
+        logger.exception("Failed to fetch alerts")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch alerts"
+        )
+
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # Updating Review Status Endpoint (PATCH /api/alerts/{alert_id}/review)
 # 1. Existence Check: Verifies that the specific alert_id exists in the database. 
@@ -77,14 +113,25 @@ def get_alerts(status: Optional[str] = None):
 @app.patch("/api/alerts/{alert_id}/review")
 def update_alert(alert_id: int, review: ReviewRequest):
     """Update the HITL decision and store operator notes in PostgreSQL JSONB/columns."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    
+    conn = None
+    cursor = None
+    
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
         # Check if record exists
         cursor.execute("SELECT id FROM audit_logs WHERE id = %s", (alert_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Alert not found")
 
+        # Prepare review data safely as JSON
+        review_data = Json({
+            "reviewed_by": review.operator_name,
+            "notes": review.notes
+        })
+        
         # Update decision
         cursor.execute(
             """
@@ -100,16 +147,42 @@ def update_alert(alert_id: int, review: ReviewRequest):
             )
         )
         conn.commit()
-        return {"status": "success", "alert_id": alert_id, "new_decision": review.decision}
+        
+        # Record successful review in application log
+        logger.info(
+            "Human review completed | Alert ID: %s | Decision: %s | Operator: %s",
+            alert_id,
+            review.decision,
+            review.operator_name
+        )
+        
+        return {
+            "status": "success", 
+            "alert_id": alert_id, 
+            "new_decision": review.decision
+        }
+        
     except HTTPException:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
+    
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
+            
+        logger.exception(
+            "Failed to update alert | Alert ID: %s",
+            alert_id
+        )
+        
         raise HTTPException(
             status_code=500,
             detail="Failed to update alert"
         )
+        
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
